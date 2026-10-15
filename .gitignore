@@ -1,0 +1,10 @@
+.venv/
+.env
+bin/
+__pycache__/
+models/
+.DS_Store
+# Personal material: keep out of the public repo
+profile.md
+docs/*
+!docs/README.md

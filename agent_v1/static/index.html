@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Reply Agent</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+    --accent: #2f6fde; --accent-soft: #e8f0fd; --good: #1f9d55; --warn: #c2410c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141414; --panel: #1d1d1d; --text: #ececea; --muted: #9a9a95; --line: #2d2d2b;
+            --accent: #6b9cff; --accent-soft: #1e2a44; --good: #4ade80; --warn: #fb923c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; height: 100vh;
+         display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 15px; margin: 0 8px 0 0; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
+  .dot.off { background: var(--muted); }
+  .meter { width: 70px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0; background: var(--good); transition: width .15s; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  button { font: inherit; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+           border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .spacer { flex: 1; }
+  .meta { color: var(--muted); font-size: 12px; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1.3fr; min-height: 0; }
+  section { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+  section:last-child { border-right: 0; }
+  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+               margin: 0; padding: 12px 16px 8px; }
+  .scroll { overflow-y: auto; padding: 0 16px 16px; flex: 1; }
+  .line { padding: 5px 0; border-bottom: 1px dashed var(--line); }
+  .line time { color: var(--muted); font-size: 11px; margin-right: 8px; font-variant-numeric: tabular-nums; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+          margin-bottom: 10px; }
+  .card .q { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .card .a { font-size: 15.5px; white-space: pre-wrap; }
+  .card .a:empty::after { content: "thinking…"; color: var(--muted); font-style: italic; }
+  .card .row { display: flex; justify-content: flex-end; margin-top: 8px; gap: 6px; }
+  .card.err .a { color: var(--warn); }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  input { flex: 1; font: inherit; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line);
+          background: var(--panel); color: var(--text); }
+  kbd { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 1.4fr; }
+                              section { border-right: 0; border-bottom: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="dot"></span>Live Reply Agent</h1>
+  <div class="meter"><div id="level"></div></div>
+  <div class="seg" id="mode">
+    <button data-v="meeting">Meeting</button><button data-v="video">Video</button>
+  </div>
+  <div class="seg" id="auto" title="When to draft replies automatically">
+    <button data-v="questions">Auto: questions</button><button data-v="every">Every line</button><button data-v="off">Manual</button>
+  </div>
+  <button id="pause">Pause</button>
+  <button class="primary" id="now" title="Shortcut: A">Answer now <kbd>A</kbd></button>
+  <span class="spacer"></span>
+  <span class="meta" id="meta"></span>
+  <button id="reload" title="Re-read docs/ and profile.md">Reload docs</button>
+</header>
+<main>
+  <section>
+    <h2>Heard</h2>
+    <div class="scroll" id="transcript"><div class="empty">Listening… play audio or join a call.</div></div>
+  </section>
+  <section>
+    <h2>Suggested replies</h2>
+    <div class="scroll" id="replies"><div class="empty">Replies appear here when someone asks something.</div></div>
+    <form id="ask"><input id="askText" placeholder="Or type a question to answer with your docs…"><button>Ask</button></form>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let ws, state = {};
+const cards = {};
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => { $("dot").className = "dot off"; setTimeout(connect, 1000); };
+}
+const send = (msg) => ws && ws.readyState === 1 && ws.send(JSON.stringify(msg));
+
+function clearEmpty(el) { const e = el.querySelector(".empty"); if (e) e.remove(); }
+function stickToBottom(el, fn) {
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40; fn();
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function handle(m) {
+  if (m.type === "state") {
+    state = m;
+    for (const b of $("mode").children) b.classList.toggle("on", b.dataset.v === m.mode);
+    for (const b of $("auto").children) b.classList.toggle("on", b.dataset.v === m.auto);
+    $("pause").textContent = m.paused ? "Resume" : "Pause";
+    $("dot").className = "dot" + (m.paused ? " off" : "");
+    $("meta").textContent = `${m.docs.length} doc${m.docs.length === 1 ? "" : "s"} · ${m.model}`;
+    $("meta").title = m.docs.join("\n") || "No documents in docs/";
+  } else if (m.type === "level") {
+    $("level").style.width = Math.min(100, Math.sqrt(m.value) * 400) + "%";
+  } else if (m.type === "transcript") {
+    const el = $("transcript");
+    stickToBottom(el, () => {
+      clearEmpty(el);
+      const d = document.createElement("div"); d.className = "line";
+      const t = document.createElement("time");
+      t.textContent = new Date(m.ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+      d.append(t, m.text); el.append(d);
+    });
+  } else if (m.type === "reply_start") {
+    const el = $("replies"); clearEmpty(el);
+    const c = document.createElement("div"); c.className = "card";
+    c.innerHTML = `<div class="q"></div><div class="a"></div><div class="row"><button>Copy</button></div>`;
+    c.querySelector(".q").textContent = "↳ " + m.question;
+    c.querySelector("button").onclick = (e) => {
+      navigator.clipboard.writeText(c.querySelector(".a").textContent);
+      e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200);
+    };
+    c.hidden = !m.forced;  // auto-triggered cards stay hidden until Claude decides to answer
+    c.dataset.forced = m.forced ? "1" : "";
+    cards[m.id] = c; el.prepend(c);
+  } else if (m.type === "reply_delta") {
+    const c = cards[m.id]; if (!c) return;
+    c.hidden = false; c.querySelector(".a").textContent += m.delta;
+  } else if (m.type === "reply_end") {
+    const c = cards[m.id];
+    if (c && m.skipped) { if (!c.dataset.forced) c.remove(); else c.querySelector(".a").textContent = "(nothing to reply to)"; }
+  } else if (m.type === "reply_cancel") {
+    // superseded: the speaker kept talking, a fresh reply to the full question follows
+    const c = cards[m.id]; if (c) c.remove();
+  } else if (m.type === "reply_error") {
+    const c = cards[m.id]; if (!c) return;
+    c.hidden = false; c.classList.add("err"); c.querySelector(".a").textContent = m.error;
+  }
+}
+
+$("mode").onclick = (e) => e.target.dataset.v && send({type: "set_mode", mode: e.target.dataset.v});
+$("auto").onclick = (e) => e.target.dataset.v && send({type: "set_auto", auto: e.target.dataset.v});
+$("pause").onclick = () => send({type: state.paused ? "resume" : "pause"});
+$("now").onclick = () => send({type: "answer_now"});
+$("reload").onclick = () => send({type: "reload_docs"});
+$("ask").onsubmit = (e) => { e.preventDefault(); const t = $("askText").value.trim();
+  if (t) { send({type: "ask", text: t}); $("askText").value = ""; } };
+document.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "a" && document.activeElement.tagName !== "INPUT" && !e.metaKey && !e.ctrlKey)
+    send({type: "answer_now"});
+});
+connect();
+</script>
+</body>
+</html>

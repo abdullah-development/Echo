@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  /* Broadsheet design tokens (dark) */
+  :root {
+    --accent: #0088b0; --accent-2: #d6006c;
+    --n100: #f8f4f4; --n200: #eae7e7; --n300: #d7d3d3; --n400: #bab6b6; --n500: #9b9797;
+    --n700: #605d5d; --n800: #444141; --n900: #2d2b2b;
+    --a200: #cbeeff; --a300: #99e0ff; --a400: #62c5ee; --a600: #1186ac; --a700: #006786; --a900: #0a303e;
+    --paper: #f3f2f2; --b300: #ffc0d0; --b400: #ff90b1; --warn: #fb923c;
+    --font: "Source Serif 4", system-ui, sans-serif;
+    --s1: 5px; --s2: 10px; --s3: 15px; --s4: 20px; --s6: 30px;
+    --r-sm: 1px; --r-md: 2px; --r-lg: 4px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--n900); color: var(--n100); font: 15px/1.55 var(--font); }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--n700); border-radius: 3px; }
+  :focus { outline: none; } :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  @keyframes lrpulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+  @keyframes lrscan { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+
+  .app { height: 100vh; display: flex; flex-direction: column; min-height: 0;
+    background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--accent) 18%, transparent) 1px, transparent 0);
+    background-size: 28px 28px; }
+
+  header { padding: var(--s4) var(--s6); display: flex; align-items: center; gap: var(--s4) var(--s6); flex-wrap: wrap;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    background: color-mix(in srgb, var(--n900) 80%, transparent); backdrop-filter: blur(8px); }
+  .brand { display: flex; align-items: center; gap: var(--s3); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--b400);
+    box-shadow: 0 0 12px var(--b400); animation: lrpulse 1.6s ease-in-out infinite; }
+  .paused .dot { background: var(--n500); box-shadow: none; animation: none; }
+  h1 { margin: 0; font-size: 22px; line-height: 1.1; letter-spacing: .01em; font-weight: 600; }
+  .status { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--a300); }
+  .wave { display: flex; align-items: center; gap: 3px; height: 28px; }
+  .wave span { width: 3px; height: 26px; border-radius: 2px; background: var(--a400); opacity: .9;
+    transform: scaleY(.12); transition: transform .12s ease-out; }
+  .wave span:nth-child(5n+3) { background: var(--b400); }
+  .paused .wave span { opacity: .3; }
+  .controls { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+  .seg { display: inline-flex; overflow: hidden; border: 1px solid var(--n700); border-radius: var(--r-md); }
+  .seg button { font: inherit; font-size: 13px; padding: 7px 12px; cursor: pointer; border: 0; background: transparent; color: var(--n100); }
+  .seg button + button { border-left: 1px solid var(--n700); }
+  .seg button.on { background: var(--accent); color: var(--paper); }
+  .seg button:not(.on):hover { background: color-mix(in srgb, var(--n100) 7%, transparent); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+    font: 600 14px/1.2 var(--font); color: var(--n100); background: transparent; border: 1px solid transparent;
+    padding: var(--s2) 18px; border-radius: var(--r-md); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-secondary { border-color: var(--n700); } .btn-secondary:hover { border-color: var(--a400); }
+  .btn-primary { background: var(--accent); color: var(--paper);
+    box-shadow: 0 0 0 1px var(--a400), 0 0 24px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .btn-primary:hover { background: var(--a600); } .btn-primary:active { background: var(--a700); }
+  .btn-ghost { color: var(--a300); padding-inline: var(--s1); }
+  .btn-ghost:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  kbd { font: inherit; font-size: 11px; border: 1px solid currentColor; border-radius: var(--r-sm); padding: 0 5px; margin-left: 4px; }
+  .meta { margin-left: auto; display: flex; align-items: center; gap: var(--s3); font-size: 13px; color: var(--n300); }
+  .meta .clock { font-variant-numeric: tabular-nums; }
+
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,5fr) minmax(0,7fr); gap: var(--s6); padding: var(--s6); }
+  .label { margin: 0; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 600; color: var(--n300); }
+
+  .heard { min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--n800); border-radius: var(--r-lg);
+    background: color-mix(in srgb, var(--n800) 45%, transparent); backdrop-filter: blur(6px); overflow: hidden; }
+  .heard-head { display: flex; align-items: center; justify-content: space-between; padding: var(--s4) var(--s6) var(--s3); }
+  .qflag { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--b300); }
+  .scan { height: 1px; position: relative; overflow: hidden; background: var(--n800); }
+  .scan span { position: absolute; top: 0; bottom: 0; width: 25%;
+    background: linear-gradient(90deg, transparent, var(--a400), transparent); animation: lrscan 2.6s linear infinite; }
+  .paused .scan span { animation: none; opacity: 0; }
+  .lines { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s3) var(--s4) var(--s6); display: flex; flex-direction: column; gap: 2px; }
+  .line { display: grid; grid-template-columns: 58px 6px minmax(0,1fr); gap: 10px; padding: 7px 8px; border-radius: var(--r-md);
+    cursor: pointer; align-items: start; }
+  .line:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .line time { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--n400); padding-top: 4px; }
+  .line i { width: 6px; height: 6px; border-radius: 50%; margin-top: 9px; }
+  .line.q i { background: var(--b400); box-shadow: 0 0 8px var(--b400); }
+  .line span { font-size: 15px; line-height: 1.5; text-wrap: pretty; color: var(--n400); }
+  .line.q span { color: var(--n100); }
+  .empty { color: var(--n500); font-style: italic; padding: var(--s6) var(--s2); text-align: center; }
+
+  .replies-col { min-height: 0; display: flex; flex-direction: column; gap: var(--s4); }
+  .replies-head { display: flex; align-items: center; justify-content: space-between; }
+  .count { font-size: 12px; color: var(--n400); }
+  .replies { flex: 1; min-height: 0; overflow-y: auto; padding-right: var(--s2); display: flex; flex-direction: column; gap: var(--s3); }
+  .card { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s4) var(--s6); border-radius: var(--r-lg);
+    backdrop-filter: blur(6px); border: 1px solid var(--n800); background: color-mix(in srgb, var(--n800) 40%, transparent); }
+  .card.top { padding: var(--s6); border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--a900) 45%, var(--n900)); box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .card .kicker { display: flex; align-items: center; gap: var(--s2); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--a300); }
+  .card .kicker .sep { color: var(--n500); }
+  .card .kicker .t { font-variant-numeric: tabular-nums; color: var(--n400); letter-spacing: .04em; }
+  .card .q { margin: 0; font-style: italic; font-size: 14px; line-height: 1.45; color: var(--n300); text-wrap: pretty; }
+  .card .a { margin: 0; font-size: 16px; line-height: 1.55; text-wrap: pretty; color: var(--n200); white-space: pre-wrap; }
+  .card.top .a { font-size: 21px; color: var(--n100); }
+  .card.pending .a { font-size: 20px; line-height: 1.45; font-style: italic; color: var(--a300); }
+  .card.err .a { color: var(--warn); font-size: 15px; }
+  .card .row { display: flex; justify-content: flex-end; }
+
+  form { display: flex; gap: var(--s2); padding: 6px; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: var(--r-lg); background: color-mix(in srgb, var(--n800) 70%, transparent);
+    box-shadow: 0 0 32px color-mix(in srgb, var(--accent) 14%, transparent); }
+  form input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--n100); font: inherit;
+    font-size: 15px; padding: 0 var(--s3); min-height: 44px; caret-color: var(--a300); }
+  form input::placeholder { color: var(--n500); }
+  form .btn { min-height: 44px; padding-inline: var(--s6); box-shadow: none; }
+
+  .docs-link { font: inherit; color: var(--a300); background: none; border: 0; padding: 0; cursor: pointer;
+    text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--a300) 40%, transparent); text-underline-offset: 3px; }
+  .docs-link:hover { color: var(--a200); }
+
+  .scrim { position: fixed; inset: 0; background: color-mix(in srgb, #000 45%, transparent); z-index: 10; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 11; display: flex; flex-direction: column;
+    background: var(--n900); border-left: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    box-shadow: -20px 0 60px color-mix(in srgb, #000 40%, transparent); }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: var(--s4) var(--s6);
+    border-bottom: 1px solid var(--n800); }
+  .drawer-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .drawer-head .sub { font-size: 12px; color: var(--n400); }
+  .drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s4) var(--s6) var(--s6); display: flex; flex-direction: column; gap: var(--s4); }
+  .drop { border: 1px dashed var(--n700); border-radius: var(--r-lg); padding: var(--s6) var(--s4); text-align: center;
+    color: var(--n300); font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop strong { color: var(--a300); font-weight: 600; }
+  .drop small { display: block; margin-top: 4px; color: var(--n500); font-size: 12px; }
+  .drop:hover, .drop.over { border-color: var(--a400); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .upmsg { font-size: 13px; color: var(--a300); min-height: 1em; margin: 0; }
+  .upmsg.err { color: var(--warn); }
+  .doclist { display: flex; flex-direction: column; gap: 2px; }
+  .doc { border-radius: var(--r-md); }
+  .doc > button { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--s3); align-items: baseline;
+    font: inherit; text-align: left; color: var(--n100); background: transparent; border: 0; padding: 8px 10px; cursor: pointer; border-radius: var(--r-md); }
+  .doc > button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .doc .nm { font-size: 14px; overflow-wrap: anywhere; }
+  .doc .nm .dir { color: var(--n500); }
+  .doc .sz { font-size: 12px; color: var(--n400); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .doc.new .nm::after { content: "new"; margin-left: 8px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--b300); }
+  .doc pre { margin: 2px 10px 10px; padding: var(--s3); max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+    font: 13px/1.5 var(--font); color: var(--n300); background: color-mix(in srgb, var(--n800) 60%, transparent); border-radius: var(--r-md); }
+
+  @media (max-width: 900px) {
+    header { gap: var(--s3); padding: var(--s3) 16px; } .meta { margin-left: 0; }
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) minmax(0,1.4fr); padding: 16px; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <h1>Echo</h1>
+        <span class="status" id="status">Connecting…</span>
+      </div>
+    </div>
+    <div class="wave" id="wave"></div>
+    <div class="controls">
+      <div class="seg" id="mode" role="radiogroup" aria-label="Source">
+        <button data-v="meeting">Meeting</button><button data-v="video">Video</button>
+      </div>
+      <div class="seg" id="auto" role="radiogroup" aria-label="Reply mode" title="When to draft replies automatically">
+        <button data-v="questions">Auto: questions</button><button data-v="every">Every line</button><button data-v="off">Manual</button>
+      </div>
+      <button type="button" class="btn btn-secondary" id="pause">Pause</button>
+      <button type="button" class="btn btn-primary" id="now" title="Shortcut: A">Answer now <kbd>A</kbd></button>
+    </div>
+    <div class="meta">
+      <span class="clock" id="clock">00:00:00</span>
+      <span id="meta"></span>
+      <button type="button" class="docs-link" id="docsBtn" title="View and upload docs">0 docs</button>
+      <span id="model"></span>
+      <button type="button" class="btn btn-ghost" id="reload" title="Re-read docs/ and profile.md">Reload docs</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="heard">
+      <div class="heard-head">
+        <h2 class="label">Heard</h2>
+        <span class="qflag">● Questions detected</span>
+      </div>
+      <div class="scan"><span></span></div>
+      <div class="lines" id="transcript"><div class="empty">Listening… play audio or join a call.</div></div>
+    </section>
+
+    <section class="replies-col">
+      <div class="replies-head">
+        <h2 class="label">Suggested replies</h2>
+        <span class="count" id="count">0 replies this session</span>
+      </div>
+      <div class="replies" id="replies"><div class="empty">Replies appear here when someone asks something.</div></div>
+      <form id="ask">
+        <input id="askText" placeholder="Ask Echo anything — answers come from your docs" autocomplete="off">
+        <button type="submit" class="btn btn-primary">Ask</button>
+      </form>
+    </section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Docs">
+  <div class="drawer-head">
+    <div><h2>Docs</h2><span class="sub" id="docsSub">What Echo answers from</span></div>
+    <button type="button" class="btn btn-ghost" id="docsClose">Close</button>
+  </div>
+  <div class="drawer-body">
+    <label class="drop" id="drop">
+      <strong>Upload files</strong> or drop them here
+      <small>.md, .txt, .csv or .pdf · saved to docs/ and used right away</small>
+      <input type="file" id="fileIn" multiple accept=".md,.markdown,.txt,.csv,.pdf" hidden>
+    </label>
+    <p class="upmsg" id="upmsg"></p>
+    <div class="doclist" id="doclist"></div>
+  </div>
+</aside>
+<script>
+const $ = (id) => document.getElementById(id);
+let ws, state = {};
+const cards = {};
+const started = Date.now();
+const fmt = (ts) => new Date(ts).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false});
+const isQ = (t) => /\?\s*$/.test(t) || /^(tell me|can you|could you|how|what|why|when|where|who|which|do you|have you|are you|walk me)\b/i.test(t.trim());
+
+// Waveform: bars follow the live audio level.
+const BARS = 22;
+for (let i = 0; i < BARS; i++) $("wave").append(document.createElement("span"));
+let level = 0, shown = 0;
+(function animate(t) {
+  shown += (level - shown) * 0.25;
+  const amp = state.paused ? 0 : Math.min(1, Math.sqrt(shown) * 6);
+  [...$("wave").children].forEach((b, i) => {
+    const wobble = 0.55 + 0.45 * Math.sin(t / (140 + (i * 37 % 9) * 25) + i * 1.7);
+    b.style.transform = `scaleY(${Math.max(0.12, amp * wobble)})`;
+  });
+  requestAnimationFrame(animate);
+})(0);
+
+setInterval(() => {
+  const s = Math.floor((Date.now() - started) / 1000);
+  $("clock").textContent = [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, "0")).join(":");
+}, 1000);
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => { $("status").textContent = "Reconnecting…"; $("app").classList.add("paused"); setTimeout(connect, 1000); };
+}
+const send = (msg) => ws && ws.readyState === 1 && ws.send(JSON.stringify(msg));
+function clearEmpty(el) { const e = el.querySelector(".empty"); if (e) e.remove(); }
+function stickToBottom(el, fn) {
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40; fn();
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function restyleCards() {
+  const all = [...$("replies").querySelectorAll(".card")].filter(c => !c.hidden);
+  all.forEach((c, i) => {
+    c.classList.toggle("top", i === 0);
+    const k = c.querySelector(".kicker .lbl");
+    k.textContent = c.classList.contains("pending") ? "Drafting" : c.classList.contains("err") ? "Error" : i === 0 ? "Latest" : "Earlier";
+  });
+  const n = all.filter(c => !c.classList.contains("pending") && !c.classList.contains("err")).length;
+  $("count").textContent = `${n} repl${n === 1 ? "y" : "ies"} this session`;
+}
+
+function handle(m) {
+  if (m.type === "state") {
+    state = m;
+    for (const b of $("mode").children) b.classList.toggle("on", b.dataset.v === m.mode);
+    for (const b of $("auto").children) b.classList.toggle("on", b.dataset.v === m.auto);
+    $("pause").textContent = m.paused ? "Resume" : "Pause";
+    $("app").classList.toggle("paused", m.paused);
+    $("status").textContent = m.paused ? "Paused" : "Listening · " + (m.mode === "meeting" ? "Meeting audio" : "Video audio");
+    $("meta").textContent = m.version ? m.version + " ·" : "";
+    $("docsBtn").textContent = `${m.docs.length} doc${m.docs.length === 1 ? "" : "s"}`;
+    $("model").textContent = "· " + m.model;
+    if (!$("drawer").hidden) loadDocs();
+  } else if (m.type === "level") {
+    level = m.value;
+  } else if (m.type === "transcript") {
+    const el = $("transcript");
+    stickToBottom(el, () => {
+      clearEmpty(el);
+      const d = document.createElement("div");
+      d.className = "line" + (isQ(m.text) ? " q" : "");
+      d.title = "Answer this line";
+      if (m.key) d.dataset.key = m.key;
+      const t = document.createElement("time"); t.textContent = fmt(m.ts * 1000);
+      const span = document.createElement("span"); span.textContent = m.text;
+      d.append(t, document.createElement("i"), span);
+      d.onclick = () => send({type: "ask", text: span.textContent});
+      el.append(d);
+    });
+  } else if (m.type === "transcript_update") {
+    const d = document.querySelector(`.line[data-key="${m.key}"]`); if (!d) return;
+    d.querySelector("span").textContent = m.text; d.classList.toggle("q", isQ(m.text));
+  } else if (m.type === "reply_start") {
+    const el = $("replies"); clearEmpty(el);
+    const c = document.createElement("article"); c.className = "card pending";
+    c.innerHTML = `<div class="kicker"><span class="lbl">Drafting</span><span class="sep">·</span><span class="t"></span></div>
+      <p class="q"></p><p class="a">Drafting from your docs…</p>
+      <div class="row"><button type="button" class="btn btn-ghost" disabled>Copy</button></div>`;
+    c.querySelector(".t").textContent = fmt(Date.now());
+    c.querySelector(".q").textContent = `“${m.question}”`;
+    const copy = c.querySelector("button");
+    copy.onclick = () => {
+      navigator.clipboard?.writeText(c.querySelector(".a").textContent).catch(() => {});
+      copy.textContent = "Copied"; setTimeout(() => copy.textContent = "Copy", 1500);
+    };
+    c.hidden = !m.forced;  // auto-triggered cards stay hidden until Claude decides to answer
+    c.dataset.forced = m.forced ? "1" : "";
+    cards[m.id] = c; el.prepend(c); restyleCards();
+  } else if (m.type === "reply_revise") {
+    const c = cards[m.id]; if (!c) return;
+    c.querySelector(".q").textContent = `“${m.question}”`;
+    c.querySelector(".a").textContent = ""; c.classList.add("pending");
+  } else if (m.type === "reply_delta") {
+    const c = cards[m.id]; if (!c) return;
+    const a = c.querySelector(".a");
+    if (c.classList.contains("pending")) { c.classList.remove("pending"); a.textContent = ""; c.querySelector("button").disabled = false; }
+    c.hidden = false; a.textContent += m.delta; restyleCards();
+  } else if (m.type === "reply_end") {
+    const c = cards[m.id]; if (!c) return;
+    if (m.skipped) {
+      if (!c.dataset.forced) c.remove();
+      else { c.classList.remove("pending"); c.querySelector(".a").textContent = "(nothing to reply to)"; }
+    }
+    restyleCards();
+  } else if (m.type === "reply_cancel") {
+    // superseded: the speaker kept talking, a fresh reply to the full question follows
+    const c = cards[m.id]; if (c) c.remove(); restyleCards();
+  } else if (m.type === "reply_error") {
+    const c = cards[m.id]; if (!c) return;
+    c.hidden = false; c.classList.remove("pending"); c.classList.add("err");
+    c.querySelector(".a").textContent = m.error; restyleCards();
+  }
+}
+
+$("mode").onclick = (e) => e.target.dataset.v && send({type: "set_mode", mode: e.target.dataset.v});
+$("auto").onclick = (e) => e.target.dataset.v && send({type: "set_auto", auto: e.target.dataset.v});
+$("pause").onclick = () => send({type: state.paused ? "resume" : "pause"});
+$("now").onclick = () => send({type: "answer_now"});
+$("reload").onclick = () => {
+  send({type: "reload_docs"}); $("reload").textContent = "Docs reloaded";
+  setTimeout(() => $("reload").textContent = "Reload docs", 1600);
+};
+// --- Docs drawer -------------------------------------------------------------
+const justAdded = new Set();
+const fmtSize = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+function openDocs() { $("drawer").hidden = $("scrim").hidden = false; loadDocs(); }
+function closeDocs() { $("drawer").hidden = $("scrim").hidden = true; }
+async function loadDocs() {
+  let docs;
+  try { docs = await (await fetch("/api/docs")).json(); } catch { return; }
+  const words = docs.reduce((n, d) => n + d.words, 0);
+  $("docsSub").textContent = `${docs.length} doc${docs.length === 1 ? "" : "s"} · ~${words.toLocaleString()} words`;
+  const open = new Set([...$("doclist").querySelectorAll(".doc pre")].map(p => p.parentElement.dataset.name));
+  const list = $("doclist"); list.replaceChildren();
+  if (!docs.length) { list.innerHTML = `<div class="empty">No docs yet. Upload your resume, notes or agenda.</div>`; return; }
+  for (const d of docs) {
+    const row = document.createElement("div"); row.className = "doc" + (justAdded.has(d.name) ? " new" : ""); row.dataset.name = d.name;
+    const b = document.createElement("button"); b.type = "button"; b.title = "Preview";
+    const nm = document.createElement("span"); nm.className = "nm";
+    const slash = d.name.lastIndexOf("/");
+    if (slash >= 0) { const dir = document.createElement("span"); dir.className = "dir"; dir.textContent = d.name.slice(0, slash + 1); nm.append(dir); }
+    nm.append(d.name.slice(slash + 1));
+    const sz = document.createElement("span"); sz.className = "sz"; sz.textContent = `${d.words.toLocaleString()} words · ${fmtSize(d.bytes)}`;
+    b.append(nm, sz); b.onclick = () => togglePreview(row);
+    row.append(b); list.append(row);
+    if (open.has(d.name)) togglePreview(row);
+  }
+}
+async function togglePreview(row) {
+  const pre = row.querySelector("pre"); if (pre) { pre.remove(); return; }
+  const p = document.createElement("pre"); p.textContent = "Loading…"; row.append(p);
+  try {
+    const r = await fetch("/api/docs/" + row.dataset.name.split("/").map(encodeURIComponent).join("/"));
+    const {text} = await r.json();
+    p.textContent = text || "(no extractable text, e.g. a scanned PDF)";
+  } catch { p.textContent = "Couldn't load this doc."; }
+}
+async function upload(files) {
+  files = [...files]; if (!files.length) return;
+  const msg = $("upmsg"); msg.classList.remove("err");
+  const failed = [];
+  for (const [i, f] of files.entries()) {
+    msg.textContent = `Uploading ${f.name}${files.length > 1 ? ` (${i + 1}/${files.length})` : ""}…`;
+    try {
+      const r = await fetch("/api/docs/" + encodeURIComponent(f.name), {method: "PUT", body: f});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      justAdded.add(j.saved);
+    } catch (e) { failed.push(`${f.name}: ${e.message}`); }
+  }
+  const ok = files.length - failed.length;
+  msg.textContent = failed.length ? failed.join(" · ") : `Added ${ok} doc${ok === 1 ? "" : "s"}. Echo is using ${ok === 1 ? "it" : "them"} now.`;
+  msg.classList.toggle("err", failed.length > 0);
+  loadDocs();
+}
+$("docsBtn").onclick = openDocs;
+$("docsClose").onclick = $("scrim").onclick = closeDocs;
+$("fileIn").onchange = (e) => { upload(e.target.files); e.target.value = ""; };
+const drop = $("drop");
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); upload(e.dataTransfer.files); };
+// Dragging files anywhere onto the panel opens the drawer.
+window.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); if ($("drawer").hidden) openDocs(); } });
+window.addEventListener("drop", (e) => e.preventDefault());
+
+$("ask").onsubmit = (e) => { e.preventDefault(); const t = $("askText").value.trim();
+  if (t) { send({type: "ask", text: t}); $("askText").value = ""; } };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("drawer").hidden) { closeDocs(); return; }
+  if (e.key.toLowerCase() === "a" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName) && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault(); send({type: "answer_now"});
+  }
+});
+connect();
+</script>
+</body>
+</html>
