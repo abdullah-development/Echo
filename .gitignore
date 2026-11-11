@@ -2,6 +2,7 @@
 .env
 bin/
 __pycache__/
+node_modules/
 models/
 .DS_Store
 # Personal material: keep out of the public repo

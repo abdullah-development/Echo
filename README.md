@@ -32,9 +32,16 @@ The first run also downloads the Whisper model (~150 MB for `base.en`).
 | `./run.sh v1` (default) | **Version 1**: quick transcript only (`base.en`). Fastest, least accurate. Code in `agent_v1/` (frozen). |
 | `./run.sh v2` | **Version 2, hybrid**: the quick transcript appears instantly (grey) and replies start right away; `large-v3-turbo` re-transcribes each clip ~8 s later and corrects the line. If the correction changes a real word of an answered question, the answer is rewritten in place (tagged *updated*). Replies also start ~1.5 s sooner: a Claude Code process is kept booted and waiting. Code in `agent/`. |
 
-| `./run.sh v3` | **Version 3, Parakeet**: NVIDIA Parakeet TDT 0.6B v3 (int8, CPU) instead of Whisper: 3.3% word errors vs 11.2% for `base.en` and 5.3% for turbo, at ~0.3 s per question. Misheard names from your docs are fixed by sound (`Cuban eats` → Kubernetes). Fast replies as in v1. Model files go in `models/parakeet-tdt-0.6b-v3-int8/` (from huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx: `*.int8.onnx`, `nemo128.onnx`, `vocab.txt`, `config.json`). Code in `agent_v3/`. |
+| `./run.sh v3` | **Version 3, Parakeet**: NVIDIA Parakeet TDT 0.6B v3 (int8, CPU) instead of Whisper: 3.3% word errors vs 11.2% for `base.en` and 5.3% for turbo, at ~0.3 s per question. Misheard names from your docs are fixed by sound (`Cuban eats` → Kubernetes). Fast replies as in v1. Also hears **your microphone**: your lines show as *You*, Claude sees them as context (no repeating what you already said), and in Video mode a question you ask out loud gets answered. Toggle with the **Mic** button or `MIC=off`; first run asks for Microphone permission for your terminal. Lines that are just the call leaking from your speakers into the mic are dropped. Model files go in `models/parakeet-tdt-0.6b-v3-int8/` (from huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx: `*.int8.onnx`, `nemo128.onnx`, `vocab.txt`, `config.json`). Code in `agent_v3/`. |
+
+| `./run.sh v4` | **Version 4, assistant**: version 3 plus a **Sound** setting (off by default). Answers are always text only and are never played into your mic, system audio or the call; Sound only adds a quiet chime in the panel when an answer lands. Code in `agent_v4/`. |
+| `./run.sh app` | **Version 4 in a compact desktop window** (Electron, `desktop/`): a small always-on-top window with the latest transcript lines and suggested answers. It reuses a running `./run.sh v4` or starts one. The **Assistant** menu has *Move to display*, *Always on top* and *Open full panel in browser*. Global shortcuts: `⌘⇧A` answer now, `⌘⇧Space` show/hide. The first run installs Electron (`npm install`). |
 
 The first `v2` run downloads the turbo model (~1.6 GB).
+
+**Screen sharing:** the desktop window is an ordinary window. Anyone watching a share of the screen it's on will see it. What a call shows is decided by the meeting app's own share picker (whole screen, one display, or one window).
+
+**Other devices (version 3):** `HOST=0.0.0.0 ./run.sh v3` also serves the panel on your network. It prints the address to open, e.g. `http://10.0.0.5:8766`. Anyone on that network can open it with no login, so only do this on a network you trust.
 
 ## Make it answer as you
 
@@ -64,7 +71,7 @@ MY_NAME=Sarah ./run.sh v2 --simulate /tmp/q.aiff
 - `WHISPER_MODEL`: `tiny.en` is fastest, `small.en` is more accurate. Use `base`/`small` (no `.en`) for other languages.
 - `CLAUDE_MODEL`: empty uses your Claude Code default; `sonnet`/`haiku` reply faster.
 - `CLAUDE_EFFORT`: `low` gives the fastest replies; `medium`/`high` give more careful ones.
-- Your own microphone is not captured; only what others say comes through system audio.
+- Versions 1, 2 and 4 don't capture your microphone; only what others say comes through system audio. Version 3 also hears your mic (`MIC=on`).
 
 > Recording or transcribing other people can require their consent depending on where you are.
 > Audio is transcribed locally; only the text transcript (plus your docs) is sent to Claude via Claude Code.
