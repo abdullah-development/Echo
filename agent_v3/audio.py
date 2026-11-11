@@ -1,4 +1,4 @@
-"""Audio sources (system audio via the Swift helper, or a file) and a voice-activity
+"""Audio sources (system audio or the microphone via the Swift helper, or a file) and a voice-activity
 segmenter that cuts the stream into utterances for Whisper as soon as the speaker pauses."""
 
 import subprocess
@@ -137,20 +137,27 @@ class AudioSource:
 
 
 class SystemAudioSource(AudioSource):
+    ARGS: list[str] = []
+    PERMISSION = "Screen Recording"
+
     def __init__(self, segmenter: Segmenter):
         super().__init__(segmenter)
         if not AUDIOTAP.exists():
             sys.exit(f"Missing {AUDIOTAP}. Build it first: ./build.sh")
         self.proc: subprocess.Popen | None = None
+        self.failed = False  # the helper died on its own (usually a missing permission)
 
     def _run(self) -> None:
-        self.proc = subprocess.Popen([str(AUDIOTAP)], stdout=subprocess.PIPE)
+        self.failed = False
+        self.proc = proc = subprocess.Popen([str(AUDIOTAP), *self.ARGS], stdout=subprocess.PIPE)
         chunk_bytes = FRAME * 4
         leftover = b""
         while True:
-            data = self.proc.stdout.read1(chunk_bytes) if self.proc.stdout else b""
+            data = proc.stdout.read1(chunk_bytes) if proc.stdout else b""
             if not data:
-                print("audiotap exited; check Screen Recording permission.", file=sys.stderr)
+                if self.proc is proc:  # not stopped on purpose
+                    self.failed = True
+                    print(f"audiotap exited; check {self.PERMISSION} permission.", file=sys.stderr)
                 return
             data = leftover + data
             usable = len(data) - len(data) % 4
@@ -158,8 +165,17 @@ class SystemAudioSource(AudioSource):
             self._feed(np.frombuffer(data[:usable], dtype="<f4").copy())
 
     def stop(self) -> None:
-        if self.proc:
-            self.proc.terminate()
+        proc, self.proc = self.proc, None
+        if proc:
+            proc.terminate()
+        self.level = 0.0
+
+
+class MicSource(SystemAudioSource):
+    """Your own voice, from the default microphone."""
+
+    ARGS = ["--mic"]
+    PERMISSION = "Microphone"
 
 
 class FileSource(AudioSource):

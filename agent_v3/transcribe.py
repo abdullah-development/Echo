@@ -21,7 +21,7 @@ HALLUCINATIONS = {"", "you", "uh", "um", "mm", "hmm", "[music]", "(music)", "[si
 
 
 class Transcriber:
-    def __init__(self, model_size: str, language: str | None, on_text: Callable[[str, float, float], None]):
+    def __init__(self, model_size: str, language: str | None, on_text: Callable[[str, float, float, str], None]):
         print("Loading Parakeet v3 speech model...")
         # Plain CPU: Apple's CoreML provider only covers part of the graph and produces garbage.
         self.model = onnx_asr.load_model(
@@ -33,34 +33,45 @@ class Transcriber:
             {w.strip().lower() for w in COMMON_WORDS.read_text().split()} if COMMON_WORDS.exists() else set()
         )
         self.fixer = TermFixer([], self.common)
-        self.queue: queue.Queue[tuple[np.ndarray, float]] = queue.Queue()
-        self._working = False
+        # The call's audio and your mic are queued separately and the call always goes first,
+        # so a noisy room can never hold up the other person's question.
+        self.queues: dict[str, queue.Queue[tuple[np.ndarray, float]]] = {"them": queue.Queue(), "you": queue.Queue()}
+        self._ready = threading.Semaphore(0)
+        self._working: str | None = None
         threading.Thread(target=self._run, daemon=True).start()
 
     def set_terms(self, terms: list[str]) -> None:
         self.fixer = TermFixer(terms, self.common)
 
-    def submit(self, audio: np.ndarray) -> None:
-        self.queue.put((audio, time.time()))
+    def submit(self, audio: np.ndarray, speaker: str = "them") -> None:
+        self.queues[speaker].put((audio, time.time()))
+        self._ready.release()
+
+    def busy_with(self, speaker: str) -> bool:
+        return self._working == speaker or not self.queues[speaker].empty()
 
     @property
     def busy(self) -> bool:
-        return self._working or not self.queue.empty()
+        return self.busy_with("them")
 
     def _run(self) -> None:
         while True:
-            audio, ts = self.queue.get()
-            self._working = True
+            self._ready.acquire()
+            speaker = "them" if not self.queues["them"].empty() else "you"
+            audio, ts = self.queues[speaker].get()
+            self._working = speaker
             try:
-                self._transcribe(audio, ts)
+                self._transcribe(audio, ts, speaker)
             except Exception as e:  # one bad clip shouldn't stop transcription
                 print(f"Transcription failed: {e}")
             finally:
-                self._working = False
+                self._working = None
 
-    def _transcribe(self, audio: np.ndarray, ts: float) -> None:
+    def _transcribe(self, audio: np.ndarray, ts: float, speaker: str) -> None:
         start = ts - len(audio) / 16_000
         text = self.model.recognize(audio.astype(np.float32), sample_rate=16_000).strip()
         if text.lower().strip(".!? ") in HALLUCINATIONS:
+            if speaker == "you":
+                print(f"[mic] nothing recognisable in that clip ({text!r})", flush=True)
             return
-        self.on_text(self.fixer.fix(text), start, ts)
+        self.on_text(self.fixer.fix(text), start, ts, speaker)
